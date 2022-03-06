@@ -1,0 +1,9 @@
+cscope.files
+cscope.*out
+TAGS
+tags
+*.a
+*.o
+.*.swp
+.container-id
+pintos-docker
