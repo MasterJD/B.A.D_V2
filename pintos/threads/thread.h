@@ -93,6 +93,11 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+   //--------------------------def. TIEMPO_DORMIDO---------------------------
+    uint64_t TIEMPO_DORMIDO;
+   //------------------------------------------------------------------------
+
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -109,6 +114,14 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
+
+//-----------------definicion de insertar_en_lista_espera-----------------
+void insertar_en_lista_espera(ticks);
+//------------------------------------------------------------------------
+//-----------------definicion de remover_thread_durmiente-----------------
+void remover_thread_durmiente(ticks);
+//------------------------------------------------------------------------
+
 
 void thread_tick (void);
 void thread_print_stats (void);
