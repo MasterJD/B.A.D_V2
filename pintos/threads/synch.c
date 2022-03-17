@@ -117,6 +117,7 @@ sema_up (struct semaphore *sema)
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   sema->value++;
+
   intr_set_level (old_level);
 }
 
@@ -196,6 +197,9 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  //IMPLEMENTANCIÓN DE LA DONACIÓN SIMLE
+  //if(thread_current()->priority > lock->holder->priority)
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -231,8 +235,13 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  //enum intr_level old_level; //Deshabilitamos interrupciones
+  //old_level = intr_disable (); //Deshabilitamos interrupciones
+
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+
 }
 
 /* Returns true if the current thread holds LOCK, false

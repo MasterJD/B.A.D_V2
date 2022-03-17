@@ -93,8 +93,11 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-   //--------------------------def. TIEMPO_DORMIDO---------------------------
-    uint64_t TIEMPO_DORMIDO;
+   //-------------------Definicion de variables propias----------------------
+    uint64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
+    uint64_t prioridad_donada; //El valor que representa la cantidad de prioridad que ha sido donada a un thread
+    uint64_t prioridad_original; //Prioridad original que posee un thread antes de someterse al proceso de donación
+    bool recibio_donacion; //Variable que nos permite saber si un thread ha donado o no prioridad a otro(s) thread
    //------------------------------------------------------------------------
 
 

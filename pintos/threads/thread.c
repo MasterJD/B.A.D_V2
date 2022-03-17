@@ -19,6 +19,7 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+#define DEPTH_LIMIT 8 //Límite de niveles para "nested priority", recomendado por la guía de stanford, "2.2.3 Priority Scheduling"
 
 //----------------------------lista_espera--------------------------------
 static struct list lista_espera;
@@ -74,6 +75,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+static struct thread *thread_mayor_prioridad(void); //Definición de nuestra función
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -260,6 +263,16 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /*
+  "Si el thread actual termina con una prioridad que ya no es la más alta, cede el procesador (yields)."
+  Luego de realizar el proceso de donación de prioridades, debemos verificar si el thread que está corriendo
+  en el tick actual posee una prioridad más baja que la prioridad de cualquier thread dentro de ready_list,
+  este debe ceder el procesador, para ello podemos "dormir" el thread haciendo "thread_yield();".
+  */
+  /*if(t->priority > thread_current()->priority){
+    thread_yield();
+  }*/
+
   return tid;
 }
 
@@ -390,17 +403,60 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/*Este metodo nos permite realizar una comparación entre dos threads que estan dentro de la ready_list
+y obtener el que tiene menor prioridad.
+*/
+static bool thread_menor_prioridad(struct list_elem *a, struct list_elem *b, void *aux UNUSED) {
+  return list_entry(a, struct thread, elem)->priority < list_entry(b, struct thread, elem)->priority;
+}
+static struct thread *thread_mayor_prioridad(){
+  return list_entry(list_max(&ready_list, thread_menor_prioridad, NULL), struct thread, elem);
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  //IMPLEMENTAR AQUI
+  //enum intr_level old_level; //Para deshabilitar las interrupciones antes de hacer donación de prioridades
+  //old_level = intr_disable(); //Deshabilitamos interrupciones
+  
+  ASSERT(new_priority >= PRI_MIN && new_priority <= PRI_MAX); //Hacemos set de new_priority para asegurar que sea mayor a 0 y menor a 64 
+  ASSERT(is_thread(thread_current()));
+  /*
+  Para verificar si un thread es candidato a recibir donación primero necesitamos evaluar si este ha recibido previamente
+  donación. Si no ha recibido donación podemos evaluar su nivel de priorididad actual y si esta es más baja a la original
+  podemos decir que es candidato a recibir donación y le asignamos una nueva prioridad.
+
+  Si por el contrario, su prioridad actual es más alta, simplemente esperamos por el lock release 
+  */
+  const struct thread *th_mayor_prioridad = thread_mayor_prioridad();
+
+  if(th_mayor_prioridad->priority > new_priority){
+    thread_current()->priority = new_priority;
+    thread_yield();
+  }
+  else{
+    thread_current()->priority = new_priority;
+  }
+
+    /*
+  "Si el thread actual termina con una prioridad que ya no es la más alta, cede el procesador (yields)."
+  Luego de realizar el proceso de donación de prioridades, debemos verificar si el thread que está corriendo
+  en el tick actual posee una prioridad más baja que la prioridad de cualquier thread dentro de ready_list,
+  este debe ceder el procesador, para ello podemos "dormir" el thread haciendo "thread_yield();".
+  */
+  //intr_set_level (old_level);
+
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
+  //IMPLEMENTAR AQUI
+  //"Retorna la prioridad del thread actual. En precencia de donacion de prioridades, retorna la prioridad (donada) más alta."
+  //return thread_current ()->prioridad_donada; //Retornamos el valor de la prioridad de un thread (La prioridad donada actual)
   return thread_current ()->priority;
 }
 
@@ -526,6 +582,13 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
+  //---------------------Inicialización de variables nuestras---------------------
+  t->prioridad_donada = 0; //Cuando inicializamos los threads la prioridad donada es igual a 0 ya que no existe donación previa
+  t->priority = priority; //La prioridad con la que se inicializa el thread es la prioridad original que se le asigna.
+  //t->prioridad_original = priority; //Nuestra prioridad original apunta a la cantidad de prioridad por defecto
+  t->recibio_donacion = false; //Inicializamos la donación en falso ya que cuando se inicializan los threads la donacion es 0
+  //------------------------------------------------------------------------------
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
