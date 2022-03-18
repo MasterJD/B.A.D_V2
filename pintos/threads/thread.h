@@ -93,13 +93,9 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-   //-------------------Definicion de variables propias----------------------
-    uint64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
-    uint64_t prioridad_donada; //El valor que representa la cantidad de prioridad que ha sido donada a un thread
-    uint64_t prioridad_original; //Prioridad original que posee un thread antes de someterse al proceso de donación
-    bool recibio_donacion; //Variable que nos permite saber si un thread ha donado o no prioridad a otro(s) thread
-   //------------------------------------------------------------------------
 
+    //-------------------Definicion de variables propias----------------------
+    int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -118,14 +114,6 @@ extern bool thread_mlfqs;
 void thread_init (void);
 void thread_start (void);
 
-//-----------------definicion de insertar_en_lista_espera-----------------
-void insertar_en_lista_espera(ticks);
-//------------------------------------------------------------------------
-//-----------------definicion de remover_thread_durmiente-----------------
-void remover_thread_durmiente(ticks);
-//------------------------------------------------------------------------
-
-
 void thread_tick (void);
 void thread_print_stats (void);
 
@@ -141,6 +129,10 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+//-----------insertar_en_lista_espera-----------------
+void insertar_en_lista_espera(int64_t ticks);
+//-----------remover_thread_durmiente----------------
+void remover_thread_durmiente(int64_t ticks);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);

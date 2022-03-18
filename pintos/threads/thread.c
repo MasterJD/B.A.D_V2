@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -19,11 +20,8 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
-#define DEPTH_LIMIT 8 //Límite de niveles para "nested priority", recomendado por la guía de stanford, "2.2.3 Priority Scheduling"
 
-//----------------------------lista_espera--------------------------------
 static struct list lista_espera;
-//------------------------------------------------------------------------
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -76,8 +74,6 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-static struct thread *thread_mayor_prioridad(void); //Definición de nuestra función
-
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -100,10 +96,9 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
-  //------------------------------init lista_espera-------------------------
-  list_init (&lista_espera);
-  //------------------------------------------------------------------------
-
+  //--------------------------
+  list_init ( &lista_espera );
+  //-------------------------
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -111,56 +106,6 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 }
-  //-------------------funcion remover_thread_durmiente------------------------
-  void remover_thread_durmiente(int64_t ticks){
-
-    /*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
-    Se mueve de regreso a ready_list, con la funcion thread_unblock*/
-    
-    //Iterar sobre "lista_espera"
-    struct list_elem *iter = list_begin(&lista_espera);
-    while(iter != list_end(&lista_espera) ){
-      struct thread *thread_lista_espera= list_entry(iter, struct thread, elem);
-      
-      /*Si el tiempo global es mayor al tiempo que el thread permanecía dormido
-        entonces su tiempo de dormir ha expirado*/
-      
-      if(ticks >= thread_lista_espera->TIEMPO_DORMIDO){
-        //Lo removemos de "lista_espera" y lo regresamos a ready_list
-        iter = list_remove(iter);
-        thread_unblock(thread_lista_espera);
-      }else{
-        //Sino, seguir iterando
-        iter = list_next(iter);
-      }
-    }
-    
-  }
-  //------------------------------------------------------------------------
-
-  //-------------------funcion insertar_lista_espera------------------------
-  void insertar_en_lista_espera(int64_t ticks){
-
-    //Deshabilitamos interrupciones
-    enum intr_level old_level;
-    old_level = intr_disable ();
-
-    /* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
-    Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
-    
-    struct thread *thread_actual = thread_current ();
-    thread_actual->TIEMPO_DORMIDO = timer_ticks() + ticks;
-    
-    /*Donde TIEMPO_DORMIDO es el atributo de la estructura thread que usted
-      definió como paso inicial*/
-    
-    list_push_back(&lista_espera, &thread_actual->elem);
-    thread_block();
-
-    //Habilitar interrupciones
-    intr_set_level (old_level);
-  }
-  //------------------------------------------------------------------------
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
@@ -262,16 +207,6 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
-  /*
-  "Si el thread actual termina con una prioridad que ya no es la más alta, cede el procesador (yields)."
-  Luego de realizar el proceso de donación de prioridades, debemos verificar si el thread que está corriendo
-  en el tick actual posee una prioridad más baja que la prioridad de cualquier thread dentro de ready_list,
-  este debe ceder el procesador, para ello podemos "dormir" el thread haciendo "thread_yield();".
-  */
-  /*if(t->priority > thread_current()->priority){
-    thread_yield();
-  }*/
 
   return tid;
 }
@@ -385,6 +320,55 @@ thread_yield (void)
   schedule ();
   intr_set_level (old_level);
 }
+/*-----------------------trabajo-------------------------*/
+void insertar_en_lista_espera(int64_t ticks){
+
+	//Deshabilitamos interrupciones
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	/* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
+	Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
+	
+	struct thread *thread_actual = thread_current ();
+  thread_actual->TIEMPO_DORMIDO = timer_ticks() + ticks;
+  
+  /*Donde TIEMPO_DORMIDO es el atributo de la estructura thread que usted
+	  definiÃ³ como paso inicial*/
+	
+  list_push_back(&lista_espera, &thread_actual->elem);
+  thread_block();
+
+  //Habilitar interrupciones
+	intr_set_level (old_level);
+}
+
+void remover_thread_durmiente(int64_t ticks){
+
+	/*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
+	Se mueve de regreso a ready_list, con la funcion thread_unblock*/
+	
+	//Iterar sobre "lista_espera"
+	struct list_elem *iter = list_begin(&lista_espera);
+	while(iter != list_end(&lista_espera) ){
+		struct thread *thread_lista_espera= list_entry(iter, struct thread, elem);
+		
+		/*Si el tiempo global es mayor al tiempo que el thread permanecÃ­a dormido
+		  entonces su tiempo de dormir ha expirado*/
+		
+		if(ticks >= thread_lista_espera->TIEMPO_DORMIDO){
+			//Lo removemos de "lista_espera" y lo regresamos a ready_list
+			iter = list_remove(iter);
+			thread_unblock(thread_lista_espera);
+		}else{
+			//Sino, seguir iterando
+			iter = list_next(iter);
+		}
+	}
+  
+}
+
+/*------------------- hasta aqui-------------------------*/
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
@@ -403,60 +387,17 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/*Este metodo nos permite realizar una comparación entre dos threads que estan dentro de la ready_list
-y obtener el que tiene menor prioridad.
-*/
-static bool thread_menor_prioridad(struct list_elem *a, struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct thread, elem)->priority < list_entry(b, struct thread, elem)->priority;
-}
-static struct thread *thread_mayor_prioridad(){
-  return list_entry(list_max(&ready_list, thread_menor_prioridad, NULL), struct thread, elem);
-}
-
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  //IMPLEMENTAR AQUI
-  //enum intr_level old_level; //Para deshabilitar las interrupciones antes de hacer donación de prioridades
-  //old_level = intr_disable(); //Deshabilitamos interrupciones
-  
-  ASSERT(new_priority >= PRI_MIN && new_priority <= PRI_MAX); //Hacemos set de new_priority para asegurar que sea mayor a 0 y menor a 64 
-  ASSERT(is_thread(thread_current()));
-  /*
-  Para verificar si un thread es candidato a recibir donación primero necesitamos evaluar si este ha recibido previamente
-  donación. Si no ha recibido donación podemos evaluar su nivel de priorididad actual y si esta es más baja a la original
-  podemos decir que es candidato a recibir donación y le asignamos una nueva prioridad.
-
-  Si por el contrario, su prioridad actual es más alta, simplemente esperamos por el lock release 
-  */
-  const struct thread *th_mayor_prioridad = thread_mayor_prioridad();
-
-  if(th_mayor_prioridad->priority > new_priority){
-    thread_current()->priority = new_priority;
-    thread_yield();
-  }
-  else{
-    thread_current()->priority = new_priority;
-  }
-
-    /*
-  "Si el thread actual termina con una prioridad que ya no es la más alta, cede el procesador (yields)."
-  Luego de realizar el proceso de donación de prioridades, debemos verificar si el thread que está corriendo
-  en el tick actual posee una prioridad más baja que la prioridad de cualquier thread dentro de ready_list,
-  este debe ceder el procesador, para ello podemos "dormir" el thread haciendo "thread_yield();".
-  */
-  //intr_set_level (old_level);
-
+  thread_current ()->priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  //IMPLEMENTAR AQUI
-  //"Retorna la prioridad del thread actual. En precencia de donacion de prioridades, retorna la prioridad (donada) más alta."
-  //return thread_current ()->prioridad_donada; //Retornamos el valor de la prioridad de un thread (La prioridad donada actual)
   return thread_current ()->priority;
 }
 
@@ -582,13 +523,6 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
-
-  //---------------------Inicialización de variables nuestras---------------------
-  t->prioridad_donada = 0; //Cuando inicializamos los threads la prioridad donada es igual a 0 ya que no existe donación previa
-  t->priority = priority; //La prioridad con la que se inicializa el thread es la prioridad original que se le asigna.
-  //t->prioridad_original = priority; //Nuestra prioridad original apunta a la cantidad de prioridad por defecto
-  t->recibio_donacion = false; //Inicializamos la donación en falso ya que cuando se inicializan los threads la donacion es 0
-  //------------------------------------------------------------------------------
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
