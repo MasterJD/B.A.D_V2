@@ -7,5 +7,5 @@ tags
 .*.swp
 .container-id
 pintos-docker
-pintos.pm
+Pintos.pm
 pintos
