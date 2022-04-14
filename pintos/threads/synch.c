@@ -32,6 +32,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+#define DEPTH_LIMIT 8 //Tope para nested donation
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -105,19 +107,32 @@ sema_try_down (struct semaphore *sema)
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
+static bool 
+comparacion_prioridades(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const  struct thread *b = list_entry (b_, struct thread, elem);
+  return a->priority > b->priority;
+}
 void
 sema_up (struct semaphore *sema) 
 {
+  //Deshabilitamos interrupciones
   enum intr_level old_level;
+  old_level = intr_disable ();
 
   ASSERT (sema != NULL);
 
-  old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
+    list_sort(&sema->waiters, (list_less_func*)&comparacion_prioridades, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
+  
+  if(list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem)->priority > thread_current()->priority){
+    thread_yield();
+  }
   sema->value++;
-
   intr_set_level (old_level);
 }
 
@@ -197,7 +212,12 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  //IMPLEMENTANCIÓN DE LA DONACIÓN SIMLE
+  //Implementación de donaciones para los lock (Simple, Multiple, Nested)
+
+  if(lock->holder != NULL){
+    
+  }
+
   //if(thread_current()->priority > lock->holder->priority)
 
   sema_down (&lock->semaphore);

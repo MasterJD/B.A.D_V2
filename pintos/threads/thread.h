@@ -95,7 +95,14 @@ struct thread
 
 
     //-------------------Definicion de variables propias----------------------
+    struct list lock_retenido; 
+    struct lock *retomar_lock;
+
     int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
+    int64_t prioridad_donada; //Almacena la prioridad a donar por un current_thread
+    bool posee_donacion; //Comprueba si un thread recibio donación
+
+    int64_t prioridad_original; 
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

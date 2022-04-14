@@ -95,10 +95,9 @@ timer_sleep (int64_t ticks)
   /*while (timer_elapsed (start) < ticks) 
     thread_yield ();*/
 
-  //--------------------------llamada a función en thread.c-------------------------
+  //-----------------------------
   insertar_en_lista_espera(ticks);
-  //------------------------------------------------------------------------
-
+  //-----------------------------
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -177,9 +176,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  //--------------------------llamada a función en thread.c-------------------------
+
+  //------------------------------
   remover_thread_durmiente(ticks);
-  //--------------------------------------------------------------------------------
+  //------------------------------
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

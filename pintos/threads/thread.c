@@ -97,7 +97,7 @@ thread_init (void)
   list_init (&all_list);
 
   //--------------------------
-  list_init ( &lista_espera );
+  list_init ( &lista_espera ); 
   //-------------------------
 
   /* Set up a thread structure for the running thread. */
@@ -337,6 +337,7 @@ void insertar_en_lista_espera(int64_t ticks){
 	  definiÃ³ como paso inicial*/
 	
   list_push_back(&lista_espera, &thread_actual->elem);
+  //list_insert_ordered(&lista_espera, &thread_current()->elem, (list_less_func*)&)
   thread_block();
 
   //Habilitar interrupciones
@@ -345,6 +346,7 @@ void insertar_en_lista_espera(int64_t ticks){
 
 void remover_thread_durmiente(int64_t ticks){
 
+  //GUIA DEL FRIJOL
 	/*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
 	Se mueve de regreso a ready_list, con la funcion thread_unblock*/
 	
@@ -387,11 +389,37 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+//Función que se encarga de obtener la prioridad menor entre la comparación de dos threads
+int 
+priority_value_less(const struct list_elem *a_,
+                    const struct list_elem *b_,
+                   void *aux)
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  return a->priority <= b->priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  ASSERT(new_priority >= PRI_MIN && new_priority <= PRI_MAX);
+  ASSERT(is_thread(thread_current()));
+
+	//Deshabilitamos interrupciones
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+  //thread_current()->prioridad_original = thread_current()->prioridad_donada;
+  thread_current()->priority = new_priority;
+  
+  if(list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority){
+    thread_yield();
+  }
+
+  //Habilitar interrupcioneslist_entry
+	intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -519,6 +547,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  t->prioridad_original = priority; //Cuando se inicializa el thread prioridad original es 0
+  t->prioridad_donada = 0; //Inicializamos la prioridad
+  t->posee_donacion = false;
+
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
