@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -19,6 +20,8 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+static struct list lista_espera;
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -84,6 +87,12 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
+}
+bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return list_entry(a, struct thread, elem)->priority >= list_entry(b, struct thread, elem)->priority;
+}
 void
 thread_init (void) 
 {
@@ -92,6 +101,10 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+  //--------------------------
+  list_init ( &lista_espera );
+  //-------------------------
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -201,6 +214,10 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  if(thread_current ()-> priority < t->priority){
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -237,7 +254,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  //list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, comparacion_prioridad, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -308,11 +326,62 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, comparacion_prioridad, NULL);
+    //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
+
+/*-----------------------trabajo-------------------------*/
+void insertar_en_lista_espera(int64_t ticks){
+
+	//Deshabilitamos interrupciones
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	/* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
+	Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
+	
+	struct thread *thread_actual = thread_current ();
+  thread_actual->TIEMPO_DORMIDO = timer_ticks() + ticks;
+  
+  /*Donde TIEMPO_DORMIDO es el atributo de la estructura thread que usted
+	  definiÃ³ como paso inicial*/
+	
+  list_insert_ordered(&lista_espera, &thread_actual->elem, comparacion_prioridad, NULL);
+  thread_block();
+
+  //Habilitar interrupciones
+	intr_set_level (old_level);
+}
+
+void remover_thread_durmiente(int64_t ticks){
+
+	/*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
+	Se mueve de regreso a ready_list, con la funcion thread_unblock*/
+	
+	//Iterar sobre "lista_espera"
+	struct list_elem *iter = list_begin(&lista_espera);
+	while(iter != list_end(&lista_espera) ){
+		struct thread *thread_lista_espera= list_entry(iter, struct thread, elem);
+		
+		/*Si el tiempo global es mayor al tiempo que el thread permanecÃ­a dormido
+		  entonces su tiempo de dormir ha expirado*/
+		
+		if(ticks >= thread_lista_espera->TIEMPO_DORMIDO){
+			//Lo removemos de "lista_espera" y lo regresamos a ready_list
+			iter = list_remove(iter);
+			thread_unblock(thread_lista_espera);
+		}else{
+			//Sino, seguir iterando
+			iter = list_next(iter);
+		}
+	}
+  
+}
+
+/*------------------- hasta aqui-------------------------*/
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
@@ -331,11 +400,17 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
+  ASSERT(new_priority<=PRI_MAX && new_priority>=PRI_MIN);
+  const struct thread *prioridad_max = list_entry(list_max(&ready_list, comparacion_prioridad, NULL), struct thread, elem);
   thread_current ()->priority = new_priority;
+  if(prioridad_max->priority > thread_current ()->priority){
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -463,6 +538,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->prioridad_original = priority;
+  t->prioridad_donada = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -498,7 +575,7 @@ next_thread_to_run (void)
 
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
-
+    11111222222333334444
    At this function's invocation, we just switched from thread
    PREV, the new thread is already running, and interrupts are
    still disabled.  This function is normally invoked by

@@ -93,6 +93,13 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+
+    //-------------------Definicion de variables propias----------------------
+    int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
+    int64_t prioridad_donada;
+    int64_t prioridad_original;
+    
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -125,6 +132,10 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+//-----------insertar_en_lista_espera-----------------
+void insertar_en_lista_espera(int64_t ticks);
+//-----------remover_thread_durmiente----------------
+void remover_thread_durmiente(int64_t ticks);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
@@ -137,5 +148,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */
