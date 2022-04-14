@@ -215,7 +215,7 @@ lock_acquire (struct lock *lock)
   //Implementación de donaciones para los lock (Simple, Multiple, Nested)
 
   if(lock->holder != NULL){
-    
+    //thread_current()->waiting_for = lock;
   }
 
   //if(thread_current()->priority > lock->holder->priority)
