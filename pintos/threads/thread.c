@@ -87,6 +87,12 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
+}
+/*bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return list_entry(a, struct thread, elem)->priority >= list_entry(b, struct thread, elem)->priority;
+}*/
 void
 thread_init (void) 
 {
@@ -208,6 +214,10 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  if(thread_current ()-> priority < t->priority){
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -245,6 +255,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
+  //list_insert_ordered (&ready_list, &t->elem, comparacion_prioridad, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -315,11 +326,13 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, comparacion_prioridad, NULL);
+    //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
+
 /*-----------------------trabajo-------------------------*/
 void insertar_en_lista_espera(int64_t ticks){
 
@@ -336,8 +349,7 @@ void insertar_en_lista_espera(int64_t ticks){
   /*Donde TIEMPO_DORMIDO es el atributo de la estructura thread que usted
 	  definiÃ³ como paso inicial*/
 	
-  list_push_back(&lista_espera, &thread_actual->elem);
-  //list_insert_ordered(&lista_espera, &thread_current()->elem, (list_less_func*)&)
+  list_insert_ordered(&lista_espera, &thread_actual->elem, comparacion_prioridad, NULL);
   thread_block();
 
   //Habilitar interrupciones
@@ -389,37 +401,17 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-//Función que se encarga de obtener la prioridad menor entre la comparación de dos threads
-int 
-priority_value_less(const struct list_elem *a_,
-                    const struct list_elem *b_,
-                   void *aux)
-{
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
-  return a->priority <= b->priority;
-}
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  ASSERT(new_priority >= PRI_MIN && new_priority <= PRI_MAX);
-  ASSERT(is_thread(thread_current()));
-
-	//Deshabilitamos interrupciones
-	enum intr_level old_level;
-	old_level = intr_disable ();
-
-  //thread_current()->prioridad_original = thread_current()->prioridad_donada;
-  thread_current()->priority = new_priority;
-  
-  if(list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority){
+  ASSERT(new_priority<=PRI_MAX && new_priority>=PRI_MIN);
+  const struct thread *prioridad_max = list_entry(list_max(&ready_list, comparacion_prioridad, NULL), struct thread, elem);
+  thread_current ()->priority = new_priority;
+  if(prioridad_max->priority > thread_current ()->priority){
     thread_yield();
   }
-
-  //Habilitar interrupcioneslist_entry
-	intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -547,6 +539,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->prioridad_original = priority;
+  t->prioridad_donada = 0;
 
   t->prioridad_original = priority; //Cuando se inicializa el thread prioridad original es 0
   t->prioridad_donada = 0; //Inicializamos la prioridad
@@ -587,7 +581,7 @@ next_thread_to_run (void)
 
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
-
+    11111222222333334444
    At this function's invocation, we just switched from thread
    PREV, the new thread is already running, and interrupts are
    still disabled.  This function is normally invoked by

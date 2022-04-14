@@ -99,10 +99,16 @@ struct thread
     struct lock *retomar_lock;
 
     int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
+<<<<<<< HEAD
     int64_t prioridad_donada; //Almacena la prioridad a donar por un current_thread
     bool posee_donacion; //Comprueba si un thread recibio donación
 
     int64_t prioridad_original; 
+=======
+    int64_t prioridad_donada;
+    int64_t prioridad_original;
+    
+>>>>>>> e7445763c0b290fe54d0de3b28b93ddbb558cb48
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -152,5 +158,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */
