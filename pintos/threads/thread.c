@@ -407,10 +407,21 @@ thread_set_priority (int new_priority)
 {
   ASSERT(new_priority<=PRI_MAX && new_priority>=PRI_MIN);
   const struct thread *prioridad_max = list_entry(list_max(&ready_list, comparacion_prioridad, NULL), struct thread, elem);
-  thread_current ()->priority = new_priority;
-  if(prioridad_max->priority > thread_current ()->priority){
-    thread_yield();
+  struct thread *cur = thread_current();
+  if (cur->prioridad_original != cur->priority)
+  {
+    if (cur->priority <= new_priority){
+      cur->prioridad_original = cur->priority = new_priority;
+    }else 
+      cur->prioridad_original = new_priority;
+    return;
   }
+    thread_current ()->priority = new_priority;
+    thread_current ()->prioridad_original = new_priority;
+    if(prioridad_max->priority > thread_current ()->priority){
+      thread_yield();
+    }
+  //}
 }
 
 /* Returns the current thread's priority. */
@@ -539,7 +550,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->prioridad_original = priority;
-  t->prioridad_donada = 0;
+  t->prioridad_donada_uso = 0;
+  t->tiene_donacion = false;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

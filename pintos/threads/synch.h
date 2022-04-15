@@ -19,9 +19,11 @@ void sema_self_test (void);
 
 /* Lock. */
 struct lock 
-  {
+  { 
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct thread *donado;
+    struct list_elem elem;
   };
 
 void lock_init (struct lock *);
@@ -38,8 +40,12 @@ struct condition
 
 void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
+
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+struct list_elem *buscar_lock(struct list *donaciones, struct lock *lock);
+bool existe_donacion(struct list *donaciones, struct lock *lock);
+
 
 /* Optimization barrier.
 

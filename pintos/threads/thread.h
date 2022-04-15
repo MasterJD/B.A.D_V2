@@ -96,9 +96,13 @@ struct thread
 
     //-------------------Definicion de variables propias----------------------
     int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
-    int64_t prioridad_donada;
+    int64_t prioridad_donada_uso;
     int64_t prioridad_original;
-    
+    bool tiene_donacion;
+    struct list donaciones;
+    struct list locks_adquiridos;
+    struct lock *lock_donacion;
+    struct lock *lock_buscado;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
