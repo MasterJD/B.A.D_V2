@@ -96,12 +96,10 @@ struct thread
 
     //-------------------Definicion de variables propias----------------------
     int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
-    int64_t prioridad_donada_uso;
     int64_t prioridad_original;
-    bool tiene_donacion;
+    int64_t prioridad_donada;
     struct list donaciones;
-    struct list locks_adquiridos;
-    struct lock *lock_donacion;
+    struct lock *lock_donado;
     struct lock *lock_buscado;
 
 #ifdef USERPROG
@@ -155,5 +153,7 @@ int thread_get_load_avg (void);
 
 bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+/*bool comparacion_prioridad_may(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comparacion_prioridad_equal_may(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);*/
 
 #endif /* threads/thread.h */

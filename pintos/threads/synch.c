@@ -44,6 +44,8 @@
    - up or "V": increment the value (and wake up one waiting
      thread, if any). */
 
+bool prioridad_semaforo(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comparacion_prioridad_donada(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void
 sema_init (struct semaphore *sema, unsigned value) 
 {
@@ -125,12 +127,12 @@ sema_up (struct semaphore *sema)
     t = list_entry(list_pop_front (&sema->waiters), struct thread, elem);
     //thread_unblock(list_entry(list_pop_front (&sema->waiters), struct thread, elem));
     thread_unblock(t);
+    }
     
     if(t->priority > thread_current ()->priority){
       thread_yield();
     }
     
-  }
   intr_set_level (old_level);
 }
 
@@ -192,6 +194,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->donado = NULL;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -207,7 +210,7 @@ lock_init (struct lock *lock)
      struct list_elem *buscador = list_begin(donaciones);
      while(buscador != list_end(donaciones)){
        struct thread *t_donador = list_entry(buscador, struct thread, elem);
-       if(t_donador->lock_donacion != lock){
+       if(t_donador->lock_donado != lock){
          buscador = list_next(buscador);
        }
        else{
@@ -216,18 +219,19 @@ lock_init (struct lock *lock)
      }
      return NULL;
    }
-   bool existe_donacion(struct list *donaciones, struct lock *lock){
+   bool buscar_lock_bool(struct list *donaciones, struct lock *lock){
      struct list_elem *buscador = list_begin(donaciones);
      while(buscador != list_end(donaciones)){
        struct thread *t_donador = list_entry(buscador, struct thread, elem);
-       if(t_donador->lock_donacion == lock){
-         return true;
-       }
+       if(t_donador->lock_donado != lock){
+         buscador = list_next(buscador);
+       }else return false;
      }
-     return false;
+     return true;
    }
+
    bool comparacion_prioridad_donada(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return list_entry(a, struct thread, elem)->prioridad_donada_uso > list_entry(b, struct thread, elem)->prioridad_donada_uso;
+  return list_entry(a, struct thread, elem)->prioridad_donada > list_entry(b, struct thread, elem)->prioridad_donada;
 }
   
 void
@@ -236,38 +240,27 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-  int nest = 0;
   enum intr_level old_level;
   old_level = intr_disable ();
-  while(lock->holder != NULL || nest < DEPTH_LIMIT){
-    if(thread_current ()->priority > (lock->holder)->priority){
-      struct list_elem *donacion = buscar_lock(&(lock->holder)->donaciones, lock);
-      if(donacion == NULL){
-        struct thread *donador = malloc(sizeof(struct thread));
-        donador->prioridad_donada_uso = thread_current ()->priority;
-        donador->lock_donacion = lock;
-        list_insert_ordered(&(lock->holder)->donaciones, &donador->elem, comparacion_prioridad_donada, NULL);
-        lock->holder->priority = donador->prioridad_donada_uso;
+  if(lock->holder != NULL){
+    if (lock->holder->priority < thread_current ()->priority) {
+      if (!buscar_lock_bool(&lock->holder->donaciones, lock)) {
+        struct thread *donacion_existente = list_entry (buscar_lock(&lock->holder->donaciones, lock), struct thread, elem);
+        if (donacion_existente->prioridad_donada < thread_current ()->priority) {
+          lock->holder->priority = thread_current ()->priority;
+          donacion_existente->prioridad_donada = thread_current ()->priority;
+        }
+      }else {
+        struct thread *donador = malloc (sizeof (struct thread));
+        donador->prioridad_donada = thread_current ()->priority;
+        donador->lock_donado = lock;
+        list_insert_ordered (&lock->holder->donaciones, &donador->elem, comparacion_prioridad_donada, NULL);
+        lock->holder->priority = donador->prioridad_donada;
         lock->donado = donador;
-      }else{
-        struct thread *ultimo_thread_donador = list_entry(donacion, struct thread, elem);
-        if(thread_current ()->priority > ultimo_thread_donador->prioridad_donada_uso){
-        (lock->holder)->priority =  thread_current ()->priority;
-        ultimo_thread_donador->prioridad_donada_uso = thread_current ()->priority;
-        list_sort(&(lock->holder)->donaciones, comparacion_prioridad_donada, NULL);
-        }        
       }
     }
-    if((lock->holder)->lock_buscado == NULL){
-      lock->holder = NULL;
-      lock = NULL;
-    }else{
-      lock = lock->holder->lock_buscado;
-      lock->holder = lock->holder->lock_buscado->holder;
-    }
-    nest++;
   }
-  thread_current ()->lock_buscado = lock;
+  thread_current()->lock_buscado = lock;
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
   thread_current ()->lock_buscado = NULL;
@@ -312,15 +305,18 @@ lock_release (struct lock *lock)
   old_level = intr_disable ();
   
   lock->holder = NULL;
-  if(lock->donado !=NULL){
-    list_remove(&lock->donado->elem);
-    if(list_empty(&thread_current ()->donaciones)){
-      thread_current ()->priority = thread_current ()-> prioridad_original;
+  struct thread *cur = thread_current ();
+  if (lock->donado != NULL)
+  {
+    list_remove (&lock->donado->elem);
+    if (!list_empty (&thread_current ()->donaciones))
+    {
+      struct thread *donations = list_entry (list_front (&thread_current ()->donaciones), struct thread, elem);
+      thread_current ()->priority = donations->prioridad_donada;
+      lock->donado = donations;
+    }else {
+      thread_current ()->priority = thread_current ()->prioridad_original;
       lock->donado = NULL;
-    }else{
-      struct thread *donados = list_entry(list_front(&thread_current()->donaciones), struct thread, elem);
-      thread_current ()->priority = donados->prioridad_donada_uso;
-      lock->donado = donados;
     }
   }
   sema_up (&lock->semaphore);
