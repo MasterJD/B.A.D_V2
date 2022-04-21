@@ -44,9 +44,10 @@
    - up or "V": increment the value (and wake up one waiting
      thread, if any). */
 
-bool prioridad_semaforo(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-bool comparacion_prioridad_donada(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+
 void
+
 sema_init (struct semaphore *sema, unsigned value) 
 {
   ASSERT (sema != NULL);
@@ -206,33 +207,7 @@ lock_init (struct lock *lock)
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
-   struct list_elem *buscar_lock(struct list *donaciones, struct lock *lock){
-     struct list_elem *buscador = list_begin(donaciones);
-     while(buscador != list_end(donaciones)){
-       struct thread *t_donador = list_entry(buscador, struct thread, elem);
-       if(t_donador->lock_donado != lock){
-         buscador = list_next(buscador);
-       }
-       else{
-         return buscador;
-       }
-     }
-     return NULL;
-   }
-   bool buscar_lock_bool(struct list *donaciones, struct lock *lock){
-     struct list_elem *buscador = list_begin(donaciones);
-     while(buscador != list_end(donaciones)){
-       struct thread *t_donador = list_entry(buscador, struct thread, elem);
-       if(t_donador->lock_donado != lock){
-         buscador = list_next(buscador);
-       }else return false;
-     }
-     return true;
-   }
-
-   bool comparacion_prioridad_donada(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return list_entry(a, struct thread, elem)->prioridad_donada > list_entry(b, struct thread, elem)->prioridad_donada;
-}
+   
   
 void
 lock_acquire (struct lock *lock)
@@ -242,32 +217,31 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
   enum intr_level old_level;
   old_level = intr_disable ();
-  if(lock->holder != NULL){
-    if (lock->holder->priority < thread_current ()->priority) {
-      if (!buscar_lock_bool(&lock->holder->donaciones, lock)) {
-        struct thread *donacion_existente = list_entry (buscar_lock(&lock->holder->donaciones, lock), struct thread, elem);
-        if (donacion_existente->prioridad_donada < thread_current ()->priority) {
-          lock->holder->priority = thread_current ()->priority;
-          donacion_existente->prioridad_donada = thread_current ()->priority;
+  struct lock *lock_actual = lock;
+  if(lock_actual->holder != NULL){
+    for(int nest = 0; nest < DEPTH_LIMIT; nest++){
+      struct thread *thread_holder = lock_actual->holder;
+      if (thread_holder->priority < thread_current ()->priority) {
+        if (buscar_lock_bool(&thread_holder->donaciones, lock_actual)) {
+          if (list_entry(buscar_lock(&thread_holder->donaciones, lock_actual), struct thread, elem)->priority < thread_current ()->priority) thread_holder->priority = thread_current ()->priority;
+        } else{
+          thread_holder->priority = thread_current ()->priority;
+          struct thread *donador = malloc (sizeof (struct thread));
+          donador->priority = thread_current ()->priority;
+          donador->lock_buscado = lock_actual;
+          lock_actual->donado = donador;
+          list_insert_ordered (&thread_holder->donaciones, &donador->elem, comparacion_prioridad, NULL);
         }
-      }else {
-        struct thread *donador = malloc (sizeof (struct thread));
-        donador->prioridad_donada = thread_current ()->priority;
-        donador->lock_donado = lock;
-        list_insert_ordered (&lock->holder->donaciones, &donador->elem, comparacion_prioridad_donada, NULL);
-        lock->holder->priority = donador->prioridad_donada;
-        lock->donado = donador;
+      thread_holder->tiene_donacion = true;
       }
+      if(thread_holder->lock_buscado == NULL) break;
+      else lock_actual = thread_holder->lock_buscado;
     }
   }
   thread_current()->lock_buscado = lock;
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
-  thread_current ()->lock_buscado = NULL;
-  //list_push_back(&thread_current ()->locks_adquiridos, &lock->elem);
   intr_set_level (old_level);
-  
-  
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -300,27 +274,23 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  
   enum intr_level old_level;
   old_level = intr_disable ();
-  
-  lock->holder = NULL;
-  struct thread *cur = thread_current ();
-  if (lock->donado != NULL)
-  {
+  if (lock->donado != NULL) {
     list_remove (&lock->donado->elem);
-    if (!list_empty (&thread_current ()->donaciones))
-    {
-      struct thread *donations = list_entry (list_front (&thread_current ()->donaciones), struct thread, elem);
-      thread_current ()->priority = donations->prioridad_donada;
-      lock->donado = donations;
+    if (!list_empty (&thread_current ()->donaciones)) {
+      struct thread *donaciones_thread = list_entry (list_front (&thread_current ()->donaciones), struct thread, elem);
+      thread_current()->priority = donaciones_thread->priority;
+      lock->donado = donaciones_thread;
     }else {
-      thread_current ()->priority = thread_current ()->prioridad_original;
+      thread_current()->priority = thread_current ()->prioridad_original;
+      thread_current()-> tiene_donacion = false;
       lock->donado = NULL;
     }
   }
+  lock->holder = NULL;
+  thread_current ()->lock_buscado = NULL;
   sema_up (&lock->semaphore);
-  //list_remove(&lock->elem);
   intr_set_level (old_level);
 }
 
@@ -397,9 +367,7 @@ cond_wait (struct condition *cond, struct lock *lock)
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to signal a condition variable within an
    interrupt handler. */
-bool prioridad_semaforo(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return list_entry(list_front(&(list_entry(a, struct semaphore_elem, elem)->semaphore.waiters)), struct thread, elem)->priority > list_entry(list_front(&(list_entry(b, struct semaphore_elem, elem)->semaphore.waiters)), struct thread, elem)->priority;
-}
+
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) 
 {
@@ -430,4 +398,27 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
 }
-
+bool prioridad_semaforo(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  return list_entry(list_front(&(list_entry(a, struct semaphore_elem, elem)->semaphore.waiters)), struct thread, elem)->priority > list_entry(list_front(&(list_entry(b, struct semaphore_elem, elem)->semaphore.waiters)), struct thread, elem)->priority;
+}
+struct list_elem *buscar_lock(struct list *donaciones, struct lock *lock){
+  struct list_elem *buscador = list_begin(donaciones);
+  while(buscador != list_end(donaciones)){
+    struct thread *t_donador = list_entry(buscador, struct thread, elem);
+    if(t_donador->lock_buscado != lock){
+      buscador = list_next(buscador);
+    }
+    else return buscador;
+  }
+  return NULL;
+}
+bool buscar_lock_bool(struct list *donaciones, struct lock *lock){
+  struct list_elem *buscador = list_begin(donaciones);
+  while(buscador != list_end(donaciones)){
+    struct thread *t_donador = list_entry(buscador, struct thread, elem);
+    if(t_donador->lock_buscado != lock){
+      buscador = list_next(buscador);
+    }else return true;
+  }
+  return false;
+}

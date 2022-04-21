@@ -26,8 +26,6 @@ struct lock
     struct list_elem elem;
   };
 
-
-
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
@@ -47,6 +45,7 @@ void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 struct list_elem *buscar_lock(struct list *don, struct lock *lock);
 bool buscar_lock_bool(struct list *don, struct lock *lock);
+bool prioridad_semaforo(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 
 

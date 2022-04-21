@@ -93,12 +93,6 @@ bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b,
 bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   return list_entry(a, struct thread, elem)->priority >= list_entry(b, struct thread, elem)->priority;
 }
-/*bool comparacion_prioridad_may(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
-}
-bool comparacion_prioridad_equal_may(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  return list_entry(a, struct thread, elem)->priority >= list_entry(b, struct thread, elem)->priority;
-}*/
 void
 thread_init (void) 
 {
@@ -414,18 +408,16 @@ thread_set_priority (int new_priority)
 {
   ASSERT(new_priority<=PRI_MAX && new_priority>=PRI_MIN);
   const struct thread *prioridad_max = list_entry(list_max(&ready_list, comparacion_prioridad, NULL), struct thread, elem);
-  if (thread_current()->prioridad_original == thread_current()->priority)
-  {
+  if (!thread_current()->tiene_donacion) {
     thread_current ()->priority = new_priority;
     thread_current ()->prioridad_original = new_priority;
-    if(prioridad_max->priority > new_priority) thread_yield(); 
   }else{
     if (thread_current()->priority < new_priority){
-      thread_current ()->prioridad_original = thread_current()->priority;
       thread_current ()->priority = new_priority;
     }else 
       thread_current()->prioridad_original = new_priority;
   }
+  if(prioridad_max->priority > new_priority) thread_yield(); 
 } 
 
 /* Returns the current thread's priority. */
@@ -554,9 +546,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->prioridad_original = priority;
-  t->prioridad_donada = 0;
+  t->tiene_donacion = false;
   t->lock_buscado = NULL;
-  t->lock_donado = NULL;
   list_init(&t->donaciones);
 
   old_level = intr_disable ();
