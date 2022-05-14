@@ -17,9 +17,17 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+<<<<<<< HEAD
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+=======
+#include "threads/malloc.h"
+#include "userprog/syscall.h"
+
+static thread_func start_process NO_RETURN;
+static bool load (const char *cmdline, void (**eip) (void), void **esp, char **saveptr);
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -37,6 +45,11 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+<<<<<<< HEAD
+=======
+  char *saveptr;
+  file_name = strtok_r((char*)file_name, " ", &saveptr );
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
@@ -53,6 +66,11 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+<<<<<<< HEAD
+=======
+  char *saveptr;
+  file_name = strtok_r((char*)file_name, " ", &saveptr);
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -88,7 +106,28 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+<<<<<<< HEAD
   return -1;
+=======
+  struct child_process* child_process_ptr = find_child_process(child_tid);
+  if (!child_process_ptr){
+    return ERROR;
+  }
+  
+  if (child_process_ptr->wait){
+    return ERROR;
+  }
+
+  child_process_ptr->wait = 1; 
+
+  while (!child_process_ptr->exit){
+    asm volatile ("" : : : "memory");
+  }
+  
+  int status = child_process_ptr->status;
+  remove_child_process(child_process_ptr);
+  return status;
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
 }
 
 /* Free the current process's resources. */
@@ -97,7 +136,26 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+<<<<<<< HEAD
 
+=======
+  
+  lock_acquire(&file_system_lock);
+  process_close_file(CLOSE_ALL_FD);
+
+  if (cur->executable){
+    file_close(cur->executable);
+  }
+
+  lock_release(&file_system_lock);
+
+  remove_child_process();
+
+  if(is_thread_alive(cur->parent)){
+    cur->cp->exit = 1;
+    sema_up(&cur->cp->exit_sema);
+  }
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -427,7 +485,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
+<<<<<<< HEAD
 setup_stack (void **esp) 
+=======
+setup_stack (void **esp, char** saveptr, const char *filename) 
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
 {
   uint8_t *kpage;
   bool success = false;
@@ -442,6 +504,70 @@ setup_stack (void **esp)
         palloc_free_page (kpage);
     }
   return success;
+<<<<<<< HEAD
+=======
+
+  const int default_argv = 2;
+  char* token;
+  char** argv = malloc(default_argv*sizeof(char*));
+  char** cont = malloc(default_argv*sizeof(char*));
+  int i;
+  int argc = 0;
+  int byte_sizy = 0;
+  int arg_size = default_argv;
+
+  for (token = (char*)filename; token != NULL; token = strtok_r(NULL, "", saveptr)){
+      cont[argc] = token;
+      argc++;
+      if (argc >= arg_size) {
+        arg_size *= 2;
+        cont = realloc (cont, arg_size*sizeof(char*));
+        argv = realloc (argv, arg_size*sizeof(char*));
+    }
+  }
+
+  for (i = argc-1; i >= 0; i--){
+    *esp -= strlen(cont[i])+1;
+    byte_size += strlen(cont[i])+1;
+    argv[i] = *esp;
+    memcpy (*esp, cont[i], strlen(cont[i])+1);
+  }
+
+  argv[argc] = 0;
+
+  i = (size_t) *esp % 4;
+  if(i){
+    *esp -= i;
+    byte_size += i;
+    memcpy(*esp, &argv[argc], i);
+  }
+
+  for (i = argc; i >= 0; i--){
+    *esp -= sizeof(char*);
+    byte_size += sizeof(char*);
+    memcpy(*esp, &argv[i], sizeof(char*));
+  }
+
+  token = *esp;
+  *esp -= sizeof(char**);
+  byte_size += sizeof(char**);
+  memcpy(*esp, &tolen, sizeof(char**));
+
+  *esp -= sizeof (int);
+  byte_size += sizeof (int);
+  memcpy(*esp, &argc, sizeof(int));
+  
+  *esp -= sizeof(void*);
+  byte_size += sizeof(void*);
+  memcpy(*esp, &argv[argc], sizeof (void*));
+
+  free(argv);
+  free(cont);
+
+  return success;
+  
+
+>>>>>>> 4fb7903bb2aeded657dc646e6507920721560ca0
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
