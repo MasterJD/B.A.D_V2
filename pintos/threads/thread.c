@@ -12,6 +12,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -20,6 +21,8 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+static int load_avg;   
 
 static struct list lista_espera;
 
@@ -93,6 +96,38 @@ bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b,
 bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   return list_entry(a, struct thread, elem)->priority >= list_entry(b, struct thread, elem)->priority;
 }
+
+void prioridad_calc(struct thread *t, void *aux UNUSED ){
+  ASSERT(is_thread (t));
+  if (t != idle_thread) {
+    t->priority = PRI_MAX - CONVERT_X_TO_INT_NEAREST(DIVFI(t->recent_cpu, 4)) - (t-> nice * 2);
+    if (t->priority < PRI_MIN){
+      t->priority = PRI_MIN;
+    }
+    else if(t->priority > PRI_MAX){
+      t->priority = PRI_MAX;
+    }
+  }
+}
+
+void recent_cpu_calc (struct thread *t, void *aux UNUSED){
+  ASSERT (is_thread (t));
+  if (t != idle_thread) {
+    t-> recent_cpu = SUMFI(MULT(DIV(MULTFI(load_avg, 2), SUMFI(MULTFI(load_avg, 2), 1)) , t->recent_cpu), t->nice);
+  }
+}
+
+void load_avg_calc (void){
+  int ready_threads = list_size(&ready_list);;
+  if (thread_current() != idle_thread){ 
+    ready_threads = list_size(&ready_list) + 1;
+  }
+  else{ 
+    ready_threads = list_size(&ready_list);
+  }
+  load_avg = MULT(DIVFI(CONVERT_N_TO_FIXED_POINT(59), 60), load_avg) + MULTFI(DIVFI(CONVERT_N_TO_FIXED_POINT(1), 60), ready_threads); 
+}
+
 void
 thread_init (void) 
 {
@@ -111,6 +146,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -217,7 +253,6 @@ thread_create (const char *name, int priority,
   if(thread_current ()-> priority < t->priority){
     thread_yield();
   }
-
   return tid;
 }
 
@@ -381,7 +416,6 @@ void remover_thread_durmiente(int64_t ticks){
 	}
   
 }
-
 /*------------------- hasta aqui-------------------------*/
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
@@ -432,6 +466,16 @@ void
 thread_set_nice (int nice UNUSED) 
 {
   /* Not yet implemented. */
+  ASSERT (nice <= NICE_MAX && nice >= NICE_MIN);
+  thread_current ()->nice = nice;
+  prioridad_calc(thread_current(), NULL);
+  if (thread_current () != idle_thread){
+     if (thread_current()->status == THREAD_RUNNING){
+      if (list_entry(list_max(&ready_list, comparacion_prioridad, NULL), struct thread, elem)->priority > thread_current ()->priority) {
+        thread_yield();
+      }
+    }
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -439,7 +483,7 @@ int
 thread_get_nice (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -447,7 +491,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return CONVERT_X_TO_INT_NEAREST(MULTFI(load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -455,9 +499,8 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return CONVERT_X_TO_INT_NEAREST(MULTFI(thread_current()->recent_cpu,100));
 }
-
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
