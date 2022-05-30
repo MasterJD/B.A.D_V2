@@ -3,6 +3,8 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
+#include "threads/synch.h"
 #include <stdint.h>
 
 /* States in a thread's life cycle. */
@@ -89,18 +91,44 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+  
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    //-------------------Definicion de variables propias----------------------
+    int64_t TIEMPO_DORMIDO; //Tiempo que va a permanecer dormido un thread
+    int64_t prioridad_original;
+    bool tiene_donacion;
+    struct list donaciones;
+    struct list locks;
+    struct lock *lock_buscado;
+    //int child_cor;
+    tid_t padre;
+    tid_t hijo_en_espera;
+    bool hijo_correctamente_cargado;
+    bool hijo_esperando_proceso;
+    bool children_init;
+    struct hash children;
+    struct semaphore exec_sema; 
+    struct lock wait_lock;
+    struct condition wait_cond; 
+    int fd;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    /* Used in syscall open. */
+     int fd_next;                             /* ID of fiel descriptor*/
+     struct list files;
+     int fd_exec;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
   };
+  struct list lista_archivos;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -125,6 +153,10 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+//-----------insertar_en_lista_espera-----------------
+void insertar_en_lista_espera(int64_t ticks);
+//-----------remover_thread_durmiente----------------
+void remover_thread_durmiente(int64_t ticks);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
@@ -132,10 +164,13 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+struct thread *get_thread(tid_t tid);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+bool comparacion_prioridad(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comparacion_prioridad_equal(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 #endif /* threads/thread.h */

@@ -4,6 +4,7 @@
 #include <list.h>
 #include <stdbool.h>
 
+
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -22,6 +23,8 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct thread *donado;
+    struct list_elem elem;
   };
 
 void lock_init (struct lock *);
@@ -40,6 +43,9 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+struct list_elem *buscar_lock(struct list *don, struct lock *lock);
+bool buscar_lock_bool(struct list *don, struct lock *lock);
+bool prioridad_semaforo(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Optimization barrier.
 
@@ -48,4 +54,7 @@ void cond_broadcast (struct condition *, struct lock *);
    reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
 
+
+//void donate_priority(struct thread *donor, struct lock *lock);
+void return_priority(struct lock *lock);
 #endif /* threads/synch.h */
